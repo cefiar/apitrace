@@ -105,6 +105,8 @@ if (NOT WIN32)
 endif()
 
 add_subdirectory (framestat)
+add_subdirectory (amd_perf_impl)
+
 if (Qt5Widgets_FOUND)
   add_subdirectory (ui)
   add_subdirectory (bargraph)
