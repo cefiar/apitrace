@@ -234,10 +234,12 @@ PerfMetricGroup::PerfMetricGroup(int group_id)
                                          num_counters, counters.data());
   assert(!GL::GetError());
   for (auto counter : counters) {
+    if (counter > 4)
+      return;
     PerfMetric *p = new PerfMetric(m_group_id, counter);
     m_metrics[p->id()] = p;
   }
-    }
+}
 
 PerfMetricGroup::~PerfMetricGroup() {
   for (auto i : m_extant_monitors)

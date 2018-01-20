@@ -106,7 +106,7 @@ QMetricsModel::init(IFrameRetrace *r,
   // request frame and initial metrics
   s.id = m_current_selection_count;
   s.series.push_back(RenderSequence(RenderId(0), RenderId(render_count)));
-  m_retrace->retraceAllMetrics(s, m_experiment_count, this);
+  // m_retrace->retraceAllMetrics(s, m_experiment_count, this);
   emit onMetricsChanged();
 }
 
@@ -152,7 +152,7 @@ QMetricsModel::onSelect(SelectionId id, QList<int> selection) {
   }
   renderSelectionFromList(m_current_selection_count, selection,
                           &m_render_selection);
-  m_retrace->retraceAllMetrics(m_render_selection, m_experiment_count, this);
+  // m_retrace->retraceAllMetrics(m_render_selection, m_experiment_count, this);
 }
 
 void
@@ -166,12 +166,12 @@ QMetricsModel::refresh() {
   RenderSelection s;
   s.id = SelectionId(0);
   s.series.push_back(RenderSequence(RenderId(0), RenderId(m_render_count)));
-  m_retrace->retraceAllMetrics(s, m_experiment_count, this);
+  // m_retrace->retraceAllMetrics(s, m_experiment_count, this);
 
   // retrace the metrics for the current selection
-  if (!m_render_selection.series.empty())
-    m_retrace->retraceAllMetrics(m_render_selection,
-                                 m_experiment_count, this);
+  // if (!m_render_selection.series.empty())
+  //   m_retrace->retraceAllMetrics(m_render_selection,
+  //                                m_experiment_count, this);
 }
 
 QMetricsModel::~QMetricsModel() {
