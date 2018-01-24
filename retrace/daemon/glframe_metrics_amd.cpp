@@ -37,6 +37,7 @@
 #include "glframe_glhelper.hpp"
 #include "glframe_logger.hpp"
 #include "glretrace.hpp"
+#include "glframe_amd_performance_monitor.hpp"
 
 using glretrace::ExperimentId;
 using glretrace::GlFunctions;
@@ -52,6 +53,7 @@ using glretrace::SelectionId;
 using glretrace::GL;
 using glretrace::glretrace_delay;
 using glretrace::ID_PREFIX_MASK;
+using glretrace::AMDPerformanceMonitor;
 
 namespace {
 
@@ -157,7 +159,7 @@ PerfMetricsContextAMD::PerfMetricsContextAMD(OnFrameRetrace *cb)
     return;
 
   int num_groups;
-  GlFunctions::GetPerfMonitorGroupsAMD(&num_groups, 0, NULL);
+  AMDPerformanceMonitor::GetPerfMonitorGroupsAMD(&num_groups, 0, NULL);
   assert(num_groups > 0);
   if (num_groups == 0) {
     GRLOG(WARN, "AMD_performance_monitor supported, but no metrics "
@@ -166,7 +168,8 @@ PerfMetricsContextAMD::PerfMetricsContextAMD(OnFrameRetrace *cb)
   }
   std::vector<uint> groups(num_groups);
   assert(!GL::GetError());
-  GlFunctions::GetPerfMonitorGroupsAMD(&num_groups, num_groups, groups.data());
+  AMDPerformanceMonitor::GetPerfMonitorGroupsAMD(
+      &num_groups, num_groups, groups.data());
   assert(!GL::GetError());
 
   std::map<std::string, MetricDescription> known_metrics;
@@ -223,26 +226,26 @@ PerfMetricGroup::PerfMetricGroup(int group_id, int offset)
   static GLint max_name_len = 0;
   assert(!GL::GetError());
   if (max_name_len == 0)
-    GlFunctions::GetPerfMonitorGroupStringAMD(m_group_id, 0,
+    AMDPerformanceMonitor::GetPerfMonitorGroupStringAMD(m_group_id, 0,
                                               &max_name_len, NULL);
   assert(!GL::GetError());
   std::vector<GLchar> group_name(max_name_len + 1);
   GLsizei name_len;
-  GlFunctions::GetPerfMonitorGroupStringAMD(m_group_id, max_name_len + 1,
-                                            &name_len, group_name.data());
+  AMDPerformanceMonitor::GetPerfMonitorGroupStringAMD(
+      m_group_id, max_name_len + 1, &name_len, group_name.data());
   assert(!GL::GetError());
   m_group_name = group_name.data();
 
   int num_counters;
   int max_active_counters;
-  GlFunctions::GetPerfMonitorCountersAMD(m_group_id,
+  AMDPerformanceMonitor::GetPerfMonitorCountersAMD(m_group_id,
                                          &num_counters,
                                          &max_active_counters,
                                          0, NULL);
   assert(offset < num_counters);
   assert(!GL::GetError());
   std::vector<uint> counters(num_counters);
-  GlFunctions::GetPerfMonitorCountersAMD(m_group_id,
+  AMDPerformanceMonitor::GetPerfMonitorCountersAMD(m_group_id,
                                          &num_counters,
                                          &max_active_counters,
                                          num_counters, counters.data());
@@ -257,7 +260,7 @@ PerfMetricGroup::~PerfMetricGroup() {
   for (auto i : m_extant_monitors)
     m_free_monitors.push_back(i.second);
   m_extant_monitors.clear();
-  GlFunctions::DeletePerfMonitorsAMD(m_free_monitors.size(),
+  AMDPerformanceMonitor::DeletePerfMonitorsAMD(m_free_monitors.size(),
                                      m_free_monitors.data());
   assert(!GL::GetError());
   m_free_monitors.clear();
@@ -281,7 +284,7 @@ PerfMetricGroup::selectMetric(MetricId metric) {
   assert(m_extant_monitors.empty());
   uint counter = m_metric.counter();
   for (auto i : m_free_monitors)
-    GlFunctions::SelectPerfMonitorCountersAMD(i, true,
+    AMDPerformanceMonitor::SelectPerfMonitorCountersAMD(i, true,
                                               m_group_id, 1,
                                               &counter);
   assert(!GL::GetError());
@@ -293,7 +296,7 @@ PerfMetricGroup::begin(RenderId render) {
     assert(!GL::GetError());
     m_free_monitors.resize(m_extant_monitors.empty() ?
                            8 : m_extant_monitors.size());
-    GlFunctions::GenPerfMonitorsAMD(m_free_monitors.size(),
+    AMDPerformanceMonitor::GenPerfMonitorsAMD(m_free_monitors.size(),
                                     m_free_monitors.data());
     assert(!GL::GetError());
     std::vector<uint> counters_to_activate;
@@ -305,13 +308,13 @@ PerfMetricGroup::begin(RenderId render) {
       counters_to_activate.push_back(m_metric.counter());
     }
     for (auto i : m_free_monitors)
-      GlFunctions::SelectPerfMonitorCountersAMD(
+      AMDPerformanceMonitor::SelectPerfMonitorCountersAMD(
           i, GL_TRUE,
           m_group_id, counters_to_activate.size(),
           counters_to_activate.data());
   }
   assert(!m_free_monitors.empty());
-  GlFunctions::BeginPerfMonitorAMD(m_free_monitors.back());
+  AMDPerformanceMonitor::BeginPerfMonitorAMD(m_free_monitors.back());
   m_extant_monitors[render] = m_free_monitors.back();
   m_free_monitors.pop_back();
 }
@@ -323,7 +326,7 @@ PerfMetricGroup::publish(MetricId metric,
     GLuint ready_for_read = 0, data_size = 0;
     GLsizei bytes_written = 0;
     while (!ready_for_read) {
-      GlFunctions::GetPerfMonitorCounterDataAMD(
+      AMDPerformanceMonitor::GetPerfMonitorCounterDataAMD(
           extant_monitor.second, GL_PERFMON_RESULT_AVAILABLE_AMD,
           sizeof(GLuint), &ready_for_read, &bytes_written);
       assert(bytes_written == sizeof(GLuint));
@@ -332,14 +335,14 @@ PerfMetricGroup::publish(MetricId metric,
         GlFunctions::Finish();
     }
     assert(ready_for_read);
-    GlFunctions::GetPerfMonitorCounterDataAMD(extant_monitor.second,
+    AMDPerformanceMonitor::GetPerfMonitorCounterDataAMD(extant_monitor.second,
                                               GL_PERFMON_RESULT_SIZE_AMD,
                                               sizeof(GLuint), &data_size,
                                               &bytes_written);
     assert(!GL::GetError());
     assert(bytes_written == sizeof(GLuint));
     std::vector<unsigned char> buf(data_size);
-    GlFunctions::GetPerfMonitorCounterDataAMD(
+    AMDPerformanceMonitor::GetPerfMonitorCounterDataAMD(
             extant_monitor.second, GL_PERFMON_RESULT_AMD, data_size,
             reinterpret_cast<uint *>(buf.data()), &bytes_written);
       const unsigned char *buf_ptr = buf.data();
@@ -372,7 +375,7 @@ PerfMetricGroup::end(RenderId render) {
   auto i = m_extant_monitors.find(render);
   if (i == m_extant_monitors.end())
     return;
-  GlFunctions::EndPerfMonitorAMD(i->second);
+  AMDPerformanceMonitor::EndPerfMonitorAMD(i->second);
 }
 
 
@@ -380,18 +383,18 @@ PerfMetric::PerfMetric(int group_id,
                        int counter_num) : m_group_id(group_id),
                                           m_counter_num(counter_num) {
   GLsizei length;
-  GlFunctions::GetPerfMonitorCounterStringAMD(
+  AMDPerformanceMonitor::GetPerfMonitorCounterStringAMD(
       m_group_id, m_counter_num, 0, &length, NULL);
   assert(!GL::GetError());
   std::vector<char> name(length + 1);
-  GlFunctions::GetPerfMonitorCounterStringAMD(
+  AMDPerformanceMonitor::GetPerfMonitorCounterStringAMD(
     m_group_id, m_counter_num, length + 1, &length,
     name.data());
   assert(!GL::GetError());
   m_name = name.data();
 
   GLuint counter_type;
-  GlFunctions::GetPerfMonitorCounterInfoAMD(
+  AMDPerformanceMonitor::GetPerfMonitorCounterInfoAMD(
       m_group_id, m_counter_num, GL_COUNTER_TYPE_AMD, &counter_type);
   m_counter_type = static_cast<PerfMetric::CounterType>(counter_type);
 }
@@ -491,6 +494,7 @@ PerfMetricsAMD::PerfMetricsAMD(OnFrameRetrace *cb)
   Context *c = getCurrentContext();
   m_current_context = new PerfMetricsContextAMD(cb);
   m_contexts[c] = m_current_context;
+  AMDPerformanceMonitor::Init();
 }
 
 PerfMetricsAMD::~PerfMetricsAMD() {

@@ -21,6 +21,7 @@ include_directories (
   ${CMAKE_SOURCE_DIR}/helpers
   ${CMAKE_BINARY_DIR}/retrace/daemon
   ${CMAKE_SOURCE_DIR}/retrace/daemon/gldispatch
+  ${CMAKE_SOURCE_DIR}/retrace/daemon/amd_perf_impl
   ${CMAKE_SOURCE_DIR}/thirdparty/md5
   )
 
@@ -92,8 +93,11 @@ add_library(retrace_daemon STATIC
   ${RETRACE_SOURCES}
   )
 
+add_subdirectory (amd_perf_impl)
+
 target_link_libraries(retrace_daemon
   glretrace_common
+  amd_perf_monitor_impl
   retrace_gldispatch
   libprotobuf
   )
@@ -105,7 +109,6 @@ if (NOT WIN32)
 endif()
 
 add_subdirectory (framestat)
-add_subdirectory (amd_perf_impl)
 
 if (Qt5Widgets_FOUND)
   add_subdirectory (ui)
