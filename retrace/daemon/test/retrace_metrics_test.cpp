@@ -120,25 +120,35 @@ TEST_F(RetraceTest, SingleMetricData) {
   GlFunctions::Init();
   TestContext c;
   MetricsCallback cb;
+
+  FrameRetrace rt;
+  rt.openFile(test_file, md5, fileSize, 7, &cb);
+
   PerfMetrics *p = PerfMetrics::Create(&cb);
   if (!cb.ids.size())
     return;
   bool found = false;
+
   for (int i = 0; i < cb.ids.size(); ++i) {
     if (cb.names[i] == "GPU Time Elapsed") {
       found = true;
       p->selectMetric(cb.ids[i]);
       break;
     }
+    if (cb.names[i] == "GRBM_000") {
+      found = true;
+      p->selectMetric(cb.ids[i]);
+      break;
+    }
   }
+  if (!found)
+    p->selectMetric(cb.ids[0]);
   EXPECT_TRUE(found);
 
-  FrameRetrace rt;
-  rt.openFile(test_file, md5, fileSize, 7, &cb);
   p->begin(RenderId(0));
   RenderSelection s;
   s.id = SelectionId(0);
-  s.series.push_back(RenderSequence(RenderId(0), RenderId(1)));
+  s.series.push_back(RenderSequence(RenderId(0), RenderId(2)));
   rt.retraceRenderTarget(ExperimentId(0), s,
                          glretrace::NORMAL_RENDER,
                          glretrace::STOP_AT_RENDER, &cb);
@@ -164,13 +174,21 @@ TEST_F(RetraceTest, FrameMetricData) {
     return;
   }
   MetricId id;
+  bool found = false;
   for (int i = 0; i < cb.ids.size(); ++i) {
     if (cb.names[i] == "GPU Time Elapsed") {
+      found = true;
+      id = cb.ids[i];
+      break;
+    }
+    if (cb.names[i] == "GRBM_000") {
+      found = true;
       id = cb.ids[i];
       break;
     }
   }
-  EXPECT_GT(id(), 0);
+  EXPECT_TRUE(found);
+  // EXPECT_GT(id(), 0);
   const std::vector<MetricId> mets = { id };
   const ExperimentId experiment(1);
   rt.retraceMetrics(mets, experiment, &cb);
@@ -213,5 +231,4 @@ TEST_F(RetraceTest, AllMetricData) {
   }
   retrace::cleanUp();
 }
-
 }  // namespace glretrace
