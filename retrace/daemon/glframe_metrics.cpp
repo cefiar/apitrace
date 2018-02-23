@@ -29,6 +29,7 @@
 #include "glframe_metrics_intel.hpp"
 #include "glframe_metrics_amd.hpp"
 #include "glframe_glhelper.hpp"
+#include "glframe_metrics_amd_gpa.hpp"
 
 using glretrace::PerfMetrics;
 using glretrace::OnFrameRetrace;
@@ -36,6 +37,9 @@ using glretrace::OnFrameRetrace;
 PerfMetrics *PerfMetrics::Create(OnFrameRetrace *callback) {
   GLint count;
   GlFunctions::GetIntegerv(GL_NUM_EXTENSIONS, &count);
+
+  new glretrace::PerfMetricsAMDGPA(callback);
+
   for (int i = 0; i < count; ++i) {
     const GLubyte *name = GlFunctions::GetStringi(GL_EXTENSIONS, i);
     if (strcmp((const char*)name, "GL_AMD_performance_monitor") == 0)

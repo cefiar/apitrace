@@ -20,6 +20,8 @@ include_directories (
   ${CMAKE_SOURCE_DIR}/common
   ${CMAKE_SOURCE_DIR}/helpers
   ${CMAKE_BINARY_DIR}/retrace/daemon
+  ${CMAKE_SOURCE_DIR}/retrace/daemon
+  ${CMAKE_SOURCE_DIR}/retrace/daemon/amd_gpa
   ${CMAKE_SOURCE_DIR}/retrace/daemon/gldispatch
   ${CMAKE_SOURCE_DIR}/retrace/daemon/amd_perf_impl
   ${CMAKE_SOURCE_DIR}/thirdparty/md5

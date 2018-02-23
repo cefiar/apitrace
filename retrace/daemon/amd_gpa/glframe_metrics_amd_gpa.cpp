@@ -27,10 +27,22 @@
 
 #include "glframe_metrics_amd_gpa.hpp"
 
+#include "GPUPerfAPI.h"
+#include "GPUPerfAPIFunctionTypes.h"
+
 using glretrace::PerfMetricsAMDGPA;
 
-PerfMetricsAMDGPA::PerfMetricsAMDGPA(OnFrameRetrace *cb) {}
-PerfMetricsAMDGPA::~PerfMetricsAMDGPA() {}
+PerfMetricsAMDGPA::PerfMetricsAMDGPA(OnFrameRetrace *cb) {
+  GPA_Initialize();
+  gpa_uint32 count;
+  GPA_GetNumCounters(&count);
+  assert(count == 0);
+}
+
+PerfMetricsAMDGPA::~PerfMetricsAMDGPA() {
+  GPA_Destroy();
+}
+
 int PerfMetricsAMDGPA::groupCount() const { return 0; }
 void PerfMetricsAMDGPA::selectMetric(MetricId metric) {}
 void PerfMetricsAMDGPA::selectGroup(int index) {}
