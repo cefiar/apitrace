@@ -20,6 +20,7 @@ target_link_libraries(amdgpa
   ${CMAKE_SOURCE_DIR}/retrace/daemon/amd_gpa/GPA/Src/GPUPerfAPICounterGenerator/libGPUPerfAPICounterGenerator-d.a
   ${CMAKE_SOURCE_DIR}/retrace/daemon/amd_gpa/GPA/Src/GPUPerfAPI-Common/libGPUPerfAPI-Common-d.a
   ${CMAKE_SOURCE_DIR}/retrace/daemon/amd_gpa/GPA/Src/DeviceInfo/libDeviceInfo-d.a
+  ${CMAKE_SOURCE_DIR}/retrace/daemon/amd_gpa/GPA/Src/GPUPerfAPIGLES/libGPUPerfAPIGLES-d.a
   )
   
 Lint(AMD_GPA_SOURCES)
