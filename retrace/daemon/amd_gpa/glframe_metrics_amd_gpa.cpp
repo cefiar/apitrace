@@ -29,16 +29,16 @@
 
 using glretrace::PerfMetricsAMDGPA;
 
-PerfMetricsAMDGPA::PerfMetricsAMDGPA(OnFrameRetrace *cb) {} 
-PerfMetricsAMDGPA::~PerfMetricsAMDGPA() {} 
-int PerfMetricsAMDGPA::groupCount() const { return 0; } 
-void PerfMetricsAMDGPA::selectMetric(MetricId metric) {} 
-void PerfMetricsAMDGPA::selectGroup(int index) {} 
-void PerfMetricsAMDGPA::begin(RenderId render) {} 
-void PerfMetricsAMDGPA::end() {} 
+PerfMetricsAMDGPA::PerfMetricsAMDGPA(OnFrameRetrace *cb) {}
+PerfMetricsAMDGPA::~PerfMetricsAMDGPA() {}
+int PerfMetricsAMDGPA::groupCount() const { return 0; }
+void PerfMetricsAMDGPA::selectMetric(MetricId metric) {}
+void PerfMetricsAMDGPA::selectGroup(int index) {}
+void PerfMetricsAMDGPA::begin(RenderId render) {}
+void PerfMetricsAMDGPA::end() {}
 void PerfMetricsAMDGPA::publish(ExperimentId experimentCount,
                SelectionId selectionCount,
-               OnFrameRetrace *callback) {} 
-void PerfMetricsAMDGPA::endContext() {} 
-void PerfMetricsAMDGPA::beginContext() {} 
+               OnFrameRetrace *callback) {}
+void PerfMetricsAMDGPA::endContext() {}
+void PerfMetricsAMDGPA::beginContext() {}
 

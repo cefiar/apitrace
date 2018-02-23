@@ -1,5 +1,3 @@
-include(Lint.cmake)
-
 include_directories (
   ${CMAKE_SOURCE_DIR}/retrace/daemon
   )
@@ -15,4 +13,3 @@ add_library(amdgpa
   
 Lint(AMD_GPA_SOURCES)
 
-add_subdirectory(test)

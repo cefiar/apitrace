@@ -119,3 +119,7 @@ if (ENABLE_WAFFLE AND Qt5Widgets_FOUND)
 endif ()
 add_subdirectory (server)
 add_subdirectory (gldispatch)
+
+if(EXISTS ${CMAKE_SOURCE_DIR}/retrace/daemon/amd_gpa/GPA)
+  add_subdirectory(amd_gpa)
+endif()
