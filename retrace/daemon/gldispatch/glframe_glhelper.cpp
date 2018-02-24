@@ -71,6 +71,7 @@ static void *pBlendFunc = NULL;
 static void *pGetFirstPerfQueryIdINTEL = NULL;
 static void *pGetNextPerfQueryIdINTEL = NULL;
 static void *pGetIntegerv = NULL;
+static void *pGetString = NULL;
 static void *pGetStringi = NULL;
 static void *pGetPerfQueryInfoINTEL = NULL;
 static void *pGetPerfCounterInfoINTEL = NULL;
@@ -268,6 +269,8 @@ GlFunctions::Init(void *lookup_fn) {
   assert(pGetNextPerfQueryIdINTEL);
   pGetIntegerv = _GetProcAddress("glGetIntegerv");
   assert(pGetIntegerv);
+  pGetString = _GetProcAddress("glGetString");
+  assert(pGetString);
   pGetStringi = _GetProcAddress("glGetStringi");
   assert(pGetStringi);
   pGetPerfQueryInfoINTEL = _GetProcAddress("glGetPerfQueryInfoINTEL");
@@ -662,6 +665,12 @@ void
 GlFunctions::GetIntegerv(GLenum pname, GLint *params) {
   typedef void (*GETINTEGERV)(GLenum pname, GLint *params);
   ((GETINTEGERV)pGetIntegerv)(pname, params);
+}
+
+const GLubyte *
+GlFunctions::GetString(GLenum pname) {
+  typedef const GLubyte * (*GETSTRING)(GLenum pname);
+  return ((GETSTRING)pGetString)(pname);
 }
 
 const GLubyte *
