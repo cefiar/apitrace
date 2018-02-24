@@ -27,6 +27,11 @@
 
 #include "glframe_metrics_amd_gpa.hpp"
 
+#include <GL/gl.h>
+#include <GL/glext.h>
+
+#include "glretrace.hpp"
+
 #include "GPUPerfAPI.h"
 #include "GPUPerfAPIFunctionTypes.h"
 
@@ -34,9 +39,9 @@ using glretrace::PerfMetricsAMDGPA;
 
 PerfMetricsAMDGPA::PerfMetricsAMDGPA(OnFrameRetrace *cb) {
   GPA_Initialize();
+  GPA_OpenContext(getCurrentContext());
   gpa_uint32 count;
   GPA_GetNumCounters(&count);
-  assert(count == 0);
 }
 
 PerfMetricsAMDGPA::~PerfMetricsAMDGPA() {
