@@ -30,18 +30,132 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 
+#include <string>
+#include <vector>
+
 #include "glretrace.hpp"
 
 #include "GPUPerfAPI.h"
 #include "GPUPerfAPIFunctionTypes.h"
 
+#include "glframe_traits.hpp"
+
+using glretrace::MetricId;
+using glretrace::OnFrameRetrace;
+using glretrace::RenderId;
 using glretrace::PerfMetricsAMDGPA;
+using glretrace::PerfContext;
+using glretrace::NoAssign;
+using glretrace::NoCopy;
+
+struct MetricDescription {
+  MetricId id;
+  std::string name;
+  std::string description;
+  MetricDescription() {}
+  MetricDescription(MetricId i,
+                    const std::string &n,
+                    const std::string &d)
+      : id(i), name(n), description(d) {}
+};
+
+class PerfMetric: public NoCopy, NoAssign {
+ public:
+  explicit PerfMetric(int index);
+  MetricId id() const;
+  const std::string &name() const;
+  const std::string &description() const;
+  float getMetric(const std::vector<unsigned char> &data) const;
+ private:
+  const int m_index;
+  std::string m_name, m_description;
+  GPA_Type m_type;
+};
+
+class PerfGroup : public NoCopy, NoAssign {
+ public:
+  explicit PerfGroup(int metric_index);
+  ~PerfGroup();
+  int metricCount() const { return m_metrics.size(); }
+  void metrics(std::vector<MetricDescription> *m) const;
+  void begin(RenderId render);
+  void end(RenderId render);
+  // void publish(MetricId metric, PerfMetricsIntel::MetricMap *m);
+ private:
+  std::vector<PerfMetric *> m_metrics;
+};
+
+namespace glretrace {
+
+class PerfContext : public NoCopy, NoAssign {
+ public:
+  explicit PerfContext(OnFrameRetrace *cb);
+  ~PerfContext();
+  int groupCount() const;
+  void selectMetric(MetricId metric);
+  void selectGroup(int index);
+  void begin(RenderId render);
+  void end();
+  // void publish(MetricMap *metrics);
+ private:
+  std::vector<PerfGroup*> m_groups;
+};
+}  // namespace glretrace
+
+PerfMetric::PerfMetric(int index) : m_index(index) {
+  const char *name, *description;
+  GPA_Status ok = GPA_GetCounterName(index, &name);
+  assert(ok = GPA_STATUS_OK);
+  m_name = name;
+  ok = GPA_GetCounterDescription(index, &description);
+  assert(ok = GPA_STATUS_OK);
+  m_description = description;
+  ok = GPA_GetCounterDataType(index, &m_type);
+  printf("new metric: %s : %s\n", name, description);
+}
+
+PerfGroup::PerfGroup(int metric_index) {
+  gpa_uint32 max_count;
+  GPA_GetNumCounters(&max_count);
+  GPA_Status ok;
+  while (metric_index < max_count) {
+    ok = GPA_EnableCounter(metric_index);
+    assert(ok = GPA_STATUS_OK);
+    gpa_uint32 passes;
+    ok = GPA_GetPassCount(&passes);
+    assert(ok = GPA_STATUS_OK);
+    assert(passes > 0);
+    if (passes > 1)
+      break;
+    m_metrics.push_back(new PerfMetric(metric_index));
+    ++metric_index;
+  }
+  ok = GPA_DisableAllCounters();
+  assert(ok = GPA_STATUS_OK);
+}
+
+PerfContext::PerfContext(OnFrameRetrace *cb) {
+  gpa_uint32 count;
+  GPA_Status ok = GPA_GetNumCounters(&count);
+  assert(ok = GPA_STATUS_OK);
+  ok = GPA_DisableAllCounters();
+  assert(ok = GPA_STATUS_OK);
+
+  int index = 0;
+  while (index < count) {
+    printf("new group\n");
+    m_groups.push_back(new PerfGroup(index));
+    index += m_groups.back()->metricCount();
+  }
+}
 
 PerfMetricsAMDGPA::PerfMetricsAMDGPA(OnFrameRetrace *cb) {
   GPA_Initialize();
-  GPA_OpenContext(getCurrentContext());
-  gpa_uint32 count;
-  GPA_GetNumCounters(&count);
+  Context *c = getCurrentContext();
+  GPA_OpenContext(c);
+  GPA_SelectContext(c);
+
+  m_contexts[c] = new PerfContext(cb);
 }
 
 PerfMetricsAMDGPA::~PerfMetricsAMDGPA() {
@@ -56,6 +170,17 @@ void PerfMetricsAMDGPA::end() {}
 void PerfMetricsAMDGPA::publish(ExperimentId experimentCount,
                SelectionId selectionCount,
                OnFrameRetrace *callback) {}
-void PerfMetricsAMDGPA::endContext() {}
-void PerfMetricsAMDGPA::beginContext() {}
 
+void PerfMetricsAMDGPA::endContext() {
+  // close all open queries
+}
+
+void PerfMetricsAMDGPA::beginContext() {
+  Context *c = getCurrentContext();
+  if (m_contexts.find(c) == m_contexts.end()) {
+    GPA_OpenContext(c);
+    m_contexts[c] = new PerfContext(NULL);
+  }
+  GPA_SelectContext(c);
+  m_current_context = m_contexts[c];
+}

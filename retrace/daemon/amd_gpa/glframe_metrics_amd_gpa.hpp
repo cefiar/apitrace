@@ -37,6 +37,7 @@
 
 namespace glretrace {
 
+class PerfContext;
 class PerfMetricsContextAMDGPA;
 struct Context;
 
@@ -56,6 +57,8 @@ class PerfMetricsAMDGPA : public PerfMetrics, NoCopy, NoAssign {
   void beginContext();
   typedef std::map<MetricId, std::map<RenderId, float>> MetricMap;
  private:
+  std::map<Context *, PerfContext*> m_contexts;
+  PerfContext *m_current_context;
   // PerfMetricsContextAMDGPA* m_current_context;
   // std::map<Context*, PerfMetricsContextAMDGPA*> m_contexts;
   // MetricMap m_data;
