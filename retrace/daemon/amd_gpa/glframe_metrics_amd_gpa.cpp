@@ -76,12 +76,13 @@ class PerfGroup : public NoCopy, NoAssign {
  public:
   explicit PerfGroup(int metric_index);
   ~PerfGroup();
-  int metricCount() const { return m_metrics.size(); }
+  int nextMetricIndex() const { return m_next_metric; }
   void metrics(std::vector<MetricDescription> *m) const;
   void begin(RenderId render);
   void end(RenderId render);
   // void publish(MetricId metric, PerfMetricsIntel::MetricMap *m);
  private:
+  int m_next_metric;
   std::vector<PerfMetric *> m_metrics;
 };
 
@@ -105,61 +106,89 @@ class PerfContext : public NoCopy, NoAssign {
 PerfMetric::PerfMetric(int index) : m_index(index) {
   const char *name, *description;
   GPA_Status ok = GPA_GetCounterName(index, &name);
-  assert(ok = GPA_STATUS_OK);
+  assert(ok == GPA_STATUS_OK);
   m_name = name;
   ok = GPA_GetCounterDescription(index, &description);
-  assert(ok = GPA_STATUS_OK);
+  assert(ok == GPA_STATUS_OK);
   m_description = description;
   ok = GPA_GetCounterDataType(index, &m_type);
-  printf("new metric: %s : %s\n", name, description);
 }
 
 PerfGroup::PerfGroup(int metric_index) {
+  m_next_metric = metric_index;
   gpa_uint32 max_count;
-  GPA_GetNumCounters(&max_count);
-  GPA_Status ok;
-  while (metric_index < max_count) {
-    ok = GPA_EnableCounter(metric_index);
-    assert(ok = GPA_STATUS_OK);
+  GPA_Status ok =  GPA_GetNumCounters(&max_count);
+  assert(ok == GPA_STATUS_OK);
+  while (m_next_metric < max_count) {
+    ok = GPA_EnableCounter(m_next_metric);
+    assert(ok == GPA_STATUS_OK);
     gpa_uint32 passes;
     ok = GPA_GetPassCount(&passes);
-    assert(ok = GPA_STATUS_OK);
+    assert(ok == GPA_STATUS_OK);
     assert(passes > 0);
-    if (passes > 1)
+    if (passes > 1) {
+      if (m_metrics.empty()) {
+        // single metric requires 2 passes.  Skip it.
+        ok = GPA_DisableAllCounters();
+        assert(ok == GPA_STATUS_OK);
+        ++m_next_metric;
+        continue;
+      }
       break;
-    m_metrics.push_back(new PerfMetric(metric_index));
-    ++metric_index;
+    }
+    m_metrics.push_back(new PerfMetric(m_next_metric));
+    ++m_next_metric;
   }
   ok = GPA_DisableAllCounters();
-  assert(ok = GPA_STATUS_OK);
+  assert(ok == GPA_STATUS_OK);
 }
 
 PerfContext::PerfContext(OnFrameRetrace *cb) {
   gpa_uint32 count;
   GPA_Status ok = GPA_GetNumCounters(&count);
-  assert(ok = GPA_STATUS_OK);
+  assert(ok == GPA_STATUS_OK);
   ok = GPA_DisableAllCounters();
-  assert(ok = GPA_STATUS_OK);
+  assert(ok == GPA_STATUS_OK);
 
   int index = 0;
   while (index < count) {
-    printf("new group\n");
     m_groups.push_back(new PerfGroup(index));
-    index += m_groups.back()->metricCount();
+    index = m_groups.back()->nextMetricIndex();
   }
 }
 
+void gpa_log(GPA_Logging_Type messageType, const char* pMessage) {
+  printf("%s\n", pMessage);
+}
+
 PerfMetricsAMDGPA::PerfMetricsAMDGPA(OnFrameRetrace *cb) {
-  GPA_Initialize();
+  GPA_Status ok;
+  ok =  GPA_RegisterLoggingCallback(GPA_LOGGING_ERROR_AND_MESSAGE, gpa_log);
+  assert(ok == GPA_STATUS_OK);
+
+  ok = GPA_Initialize();
+  assert(ok == GPA_STATUS_OK);
   Context *c = getCurrentContext();
-  GPA_OpenContext(c);
-  GPA_SelectContext(c);
+  if (c == NULL)
+    c = reinterpret_cast<Context*>(this);
+  ok = GPA_OpenContext(c);
+  // assert(ok == GPA_STATUS_OK);
+  ok = GPA_SelectContext(c);
+  assert(ok == GPA_STATUS_OK);
 
   m_contexts[c] = new PerfContext(cb);
 }
 
 PerfMetricsAMDGPA::~PerfMetricsAMDGPA() {
-  GPA_Destroy();
+  GPA_Status ok;
+  for (auto i : m_contexts) {
+    ok = GPA_SelectContext(i.first);
+    assert(ok == GPA_STATUS_OK);
+    ok =  GPA_CloseContext();
+    assert(ok == GPA_STATUS_OK);
+  }
+  ok = GPA_Destroy();
+  assert(ok == GPA_STATUS_OK);
 }
 
 int PerfMetricsAMDGPA::groupCount() const { return 0; }
@@ -177,10 +206,14 @@ void PerfMetricsAMDGPA::endContext() {
 
 void PerfMetricsAMDGPA::beginContext() {
   Context *c = getCurrentContext();
+  GPA_Status ok;
   if (m_contexts.find(c) == m_contexts.end()) {
-    GPA_OpenContext(c);
+    ok = GPA_OpenContext(c);
+    assert(ok == GPA_STATUS_OK);
+
     m_contexts[c] = new PerfContext(NULL);
   }
-  GPA_SelectContext(c);
+  ok = GPA_SelectContext(c);
+  assert(ok == GPA_STATUS_OK);
   m_current_context = m_contexts[c];
 }
