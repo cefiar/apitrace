@@ -62,21 +62,21 @@ struct MetricDescription {
 
 class PerfMetric: public NoCopy, NoAssign {
  public:
-  explicit PerfMetric(int index);
+  explicit PerfMetric(int group, int index);
   MetricId id() const;
-  const std::string &name() const;
-  const std::string &description() const;
+  const std::string &name() const { return m_name; }
+  const std::string &description() const { return m_description; }
   float getMetric(const std::vector<unsigned char> &data) const;
   void enable();
  private:
-  const int m_index;
+  const int m_group, m_index;
   std::string m_name, m_description;
   GPA_Type m_type;
 };
 
 class PerfGroup : public NoCopy, NoAssign {
  public:
-  explicit PerfGroup(int metric_index);
+  PerfGroup(int group_index, int metric_index);
   ~PerfGroup();
   int nextMetricIndex() const { return m_next_metric; }
   void metrics(std::vector<MetricDescription> *m) const;
@@ -107,7 +107,8 @@ class PerfContext : public NoCopy, NoAssign {
 };
 }  // namespace glretrace
 
-PerfMetric::PerfMetric(int index) : m_index(index) {
+PerfMetric::PerfMetric(int group, int index) : m_group(group),
+                                               m_index(index) {
   const char *name, *description;
   GPA_Status ok = GPA_GetCounterName(index, &name);
   assert(ok == GPA_STATUS_OK);
@@ -118,13 +119,18 @@ PerfMetric::PerfMetric(int index) : m_index(index) {
   ok = GPA_GetCounterDataType(index, &m_type);
 }
 
+MetricId
+PerfMetric::id() const {
+  return MetricId(m_group, m_index);
+}
+
 void PerfMetric::enable() {
   GPA_Status ok = GPA_EnableCounter(m_index);
   assert(ok == GPA_STATUS_OK);
 }
 
 
-PerfGroup::PerfGroup(int metric_index) {
+PerfGroup::PerfGroup(int group_index, int metric_index) {
   m_next_metric = metric_index;
   gpa_uint32 max_count;
   GPA_Status ok =  GPA_GetNumCounters(&max_count);
@@ -146,11 +152,19 @@ PerfGroup::PerfGroup(int metric_index) {
       }
       break;
     }
-    m_metrics.push_back(new PerfMetric(m_next_metric));
+    m_metrics.push_back(new PerfMetric(group_index, m_next_metric));
     ++m_next_metric;
   }
   ok = GPA_DisableAllCounters();
   assert(ok == GPA_STATUS_OK);
+}
+
+void
+PerfGroup::metrics(std::vector<MetricDescription> *out) const {
+  for (auto m : m_metrics)
+    out->push_back(MetricDescription(m->id(),
+                                     m->name(),
+                                     m->description()));
 }
 
 void
@@ -175,10 +189,23 @@ PerfContext::PerfContext(OnFrameRetrace *cb) {
   assert(ok == GPA_STATUS_OK);
 
   int index = 0;
+  std::vector<MetricDescription> metrics;
   while (index < count) {
-    m_groups.push_back(new PerfGroup(index));
+    PerfGroup *pg = new PerfGroup(m_groups.size(), index);
+    m_groups.push_back(pg);
     index = m_groups.back()->nextMetricIndex();
+    pg->metrics(&metrics);
   }
+  std::vector<MetricId> ids;
+  std::vector<std::string> names;
+  std::vector<std::string> descriptions;
+  for (auto m : metrics) {
+    ids.push_back(m.id);
+    names.push_back(m.name);
+    descriptions.push_back(m.description);
+  }
+  if (cb)
+    cb->onMetricList(ids, names, descriptions);
 }
 
 void
@@ -233,23 +260,31 @@ int PerfMetricsAMDGPA::groupCount() const {
 }
 
 void PerfMetricsAMDGPA::selectMetric(MetricId metric) {
-  GPA_Status ok = GPA_EndSession();
-  assert(ok == GPA_STATUS_OK);
+  GPA_Status ok = GPA_EndPass();
+  //  assert(ok == GPA_STATUS_OK);
+  ok = GPA_EndSession();
+  // assert(ok == GPA_STATUS_OK);
   m_current_group = INVALID_GROUP;
   for (auto c : m_contexts)
     c.second->selectMetric(metric);
   ok = GPA_BeginSession(&m_session_id);
   assert(ok == GPA_STATUS_OK);
+  ok = GPA_BeginPass();
+  assert(ok == GPA_STATUS_OK);
 }
 
 void PerfMetricsAMDGPA::selectGroup(int index) {
-  GPA_Status ok = GPA_EndSession();
-  assert(ok == GPA_STATUS_OK);
+  GPA_Status ok = GPA_EndPass();
+  // assert(ok == GPA_STATUS_OK);
+  ok = GPA_EndSession();
+  // assert(ok == GPA_STATUS_OK);
   m_current_metric = MetricId();  // no metric
   m_current_group = index;
   for (auto c : m_contexts)
     c.second->selectGroup(index);
   ok = GPA_BeginSession(&m_session_id);
+  assert(ok == GPA_STATUS_OK);
+  ok = GPA_BeginPass();
   assert(ok == GPA_STATUS_OK);
 }
 
