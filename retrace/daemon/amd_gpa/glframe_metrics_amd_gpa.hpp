@@ -56,14 +56,17 @@ class PerfMetricsAMDGPA : public PerfMetrics, NoCopy, NoAssign {
   void endContext();
   void beginContext();
   typedef std::map<MetricId, std::map<RenderId, float>> MetricMap;
+
  private:
   std::map<Context *, PerfContext*> m_contexts;
   PerfContext *m_current_context;
   // PerfMetricsContextAMDGPA* m_current_context;
   // std::map<Context*, PerfMetricsContextAMDGPA*> m_contexts;
   // MetricMap m_data;
-  // int m_current_group;
-  // MetricId m_current_metric;
+  int m_current_group;
+  MetricId m_current_metric;
+  uint32_t m_session_id;
+  std::vector<RenderId> m_open_samples;
 };
 
 }  // namespace glretrace

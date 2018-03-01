@@ -47,6 +47,7 @@ using glretrace::PerfMetricsAMDGPA;
 using glretrace::PerfContext;
 using glretrace::NoAssign;
 using glretrace::NoCopy;
+using glretrace::ID_PREFIX_MASK;
 
 struct MetricDescription {
   MetricId id;
@@ -66,6 +67,7 @@ class PerfMetric: public NoCopy, NoAssign {
   const std::string &name() const;
   const std::string &description() const;
   float getMetric(const std::vector<unsigned char> &data) const;
+  void enable();
  private:
   const int m_index;
   std::string m_name, m_description;
@@ -80,6 +82,8 @@ class PerfGroup : public NoCopy, NoAssign {
   void metrics(std::vector<MetricDescription> *m) const;
   void begin(RenderId render);
   void end(RenderId render);
+  void selectMetric(MetricId metric);
+  void selectAll();
   // void publish(MetricId metric, PerfMetricsIntel::MetricMap *m);
  private:
   int m_next_metric;
@@ -92,7 +96,7 @@ class PerfContext : public NoCopy, NoAssign {
  public:
   explicit PerfContext(OnFrameRetrace *cb);
   ~PerfContext();
-  int groupCount() const;
+  int groupCount() const { return m_groups.size(); }
   void selectMetric(MetricId metric);
   void selectGroup(int index);
   void begin(RenderId render);
@@ -113,6 +117,12 @@ PerfMetric::PerfMetric(int index) : m_index(index) {
   m_description = description;
   ok = GPA_GetCounterDataType(index, &m_type);
 }
+
+void PerfMetric::enable() {
+  GPA_Status ok = GPA_EnableCounter(m_index);
+  assert(ok == GPA_STATUS_OK);
+}
+
 
 PerfGroup::PerfGroup(int metric_index) {
   m_next_metric = metric_index;
@@ -143,6 +153,20 @@ PerfGroup::PerfGroup(int metric_index) {
   assert(ok == GPA_STATUS_OK);
 }
 
+void
+PerfGroup::selectMetric(MetricId metric) {
+  GPA_Status ok = GPA_DisableAllCounters();
+  assert(ok == GPA_STATUS_OK);
+  m_metrics[metric.counter()]->enable();
+}
+
+void PerfGroup::selectAll() {
+  GPA_Status ok = GPA_DisableAllCounters();
+  assert(ok == GPA_STATUS_OK);
+  for (auto m : m_metrics)
+    m->enable();
+}
+
 PerfContext::PerfContext(OnFrameRetrace *cb) {
   gpa_uint32 count;
   GPA_Status ok = GPA_GetNumCounters(&count);
@@ -157,11 +181,24 @@ PerfContext::PerfContext(OnFrameRetrace *cb) {
   }
 }
 
+void
+PerfContext::selectMetric(MetricId metric) {
+  m_groups[metric.group()]->selectMetric(metric);
+}
+
+void
+PerfContext::selectGroup(int index) {
+  m_groups[index]->selectAll();
+}
+
 void gpa_log(GPA_Logging_Type messageType, const char* pMessage) {
   printf("%s\n", pMessage);
 }
 
-PerfMetricsAMDGPA::PerfMetricsAMDGPA(OnFrameRetrace *cb) {
+static const int INVALID_GROUP = -1;
+
+PerfMetricsAMDGPA::PerfMetricsAMDGPA(OnFrameRetrace *cb)
+    : m_current_group(INVALID_GROUP) {
   GPA_Status ok;
   ok =  GPA_RegisterLoggingCallback(GPA_LOGGING_ERROR_AND_MESSAGE, gpa_log);
   assert(ok == GPA_STATUS_OK);
@@ -191,27 +228,66 @@ PerfMetricsAMDGPA::~PerfMetricsAMDGPA() {
   assert(ok == GPA_STATUS_OK);
 }
 
-int PerfMetricsAMDGPA::groupCount() const { return 0; }
-void PerfMetricsAMDGPA::selectMetric(MetricId metric) {}
-void PerfMetricsAMDGPA::selectGroup(int index) {}
-void PerfMetricsAMDGPA::begin(RenderId render) {}
-void PerfMetricsAMDGPA::end() {}
-void PerfMetricsAMDGPA::publish(ExperimentId experimentCount,
-               SelectionId selectionCount,
-               OnFrameRetrace *callback) {}
-
-void PerfMetricsAMDGPA::endContext() {
-  // close all open queries
+int PerfMetricsAMDGPA::groupCount() const {
+  return m_contexts.begin()->second->groupCount();
 }
 
-void PerfMetricsAMDGPA::beginContext() {
+void PerfMetricsAMDGPA::selectMetric(MetricId metric) {
+  GPA_Status ok = GPA_EndSession();
+  assert(ok == GPA_STATUS_OK);
+  m_current_group = INVALID_GROUP;
+  for (auto c : m_contexts)
+    c.second->selectMetric(metric);
+  ok = GPA_BeginSession(&m_session_id);
+  assert(ok == GPA_STATUS_OK);
+}
+
+void PerfMetricsAMDGPA::selectGroup(int index) {
+  GPA_Status ok = GPA_EndSession();
+  assert(ok == GPA_STATUS_OK);
+  m_current_metric = MetricId();  // no metric
+  m_current_group = index;
+  for (auto c : m_contexts)
+    c.second->selectGroup(index);
+  ok = GPA_BeginSession(&m_session_id);
+  assert(ok == GPA_STATUS_OK);
+}
+
+void PerfMetricsAMDGPA::begin(RenderId render) {
+  GPA_Status ok = GPA_BeginSample(render());
+  assert(ok == GPA_STATUS_OK);
+  m_open_samples.push_back(render);
+}
+void PerfMetricsAMDGPA::end() {
+  GPA_Status ok = GPA_EndSample();
+  assert(ok == GPA_STATUS_OK);
+}
+void PerfMetricsAMDGPA::publish(ExperimentId experimentCount,
+               SelectionId selectionCount,
+               OnFrameRetrace *callback) {
+}
+
+void
+PerfMetricsAMDGPA::endContext() {
+  // close all open queries
+  GPA_Status ok = GPA_EndSample();
+  assert(ok == GPA_STATUS_OK);
+}
+
+void
+PerfMetricsAMDGPA::beginContext() {
   Context *c = getCurrentContext();
   GPA_Status ok;
   if (m_contexts.find(c) == m_contexts.end()) {
     ok = GPA_OpenContext(c);
     assert(ok == GPA_STATUS_OK);
 
-    m_contexts[c] = new PerfContext(NULL);
+    PerfContext *pc = new PerfContext(NULL);
+    m_contexts[c] = pc;
+    if (m_current_group != INVALID_GROUP)
+      pc->selectGroup(m_current_group);
+    else if (m_current_metric())
+      pc->selectMetric(m_current_metric);
   }
   ok = GPA_SelectContext(c);
   assert(ok == GPA_STATUS_OK);
