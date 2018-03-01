@@ -135,7 +135,7 @@ TEST_F(RetraceTest, SingleMetricData) {
       p->selectMetric(cb.ids[i]);
       break;
     }
-    if (cb.names[i] == "GRBM_000") {
+    if (cb.names[i] == "GPUTime") {
       found = true;
       p->selectMetric(cb.ids[i]);
       break;
