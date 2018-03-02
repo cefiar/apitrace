@@ -30,6 +30,7 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,8 @@
 #include "glframe_traits.hpp"
 
 using glretrace::MetricId;
+using glretrace::ExperimentId;
+using glretrace::SelectionId;
 using glretrace::OnFrameRetrace;
 using glretrace::RenderId;
 using glretrace::PerfMetricsAMDGPA;
@@ -68,6 +71,11 @@ class PerfMetric: public NoCopy, NoAssign {
   const std::string &description() const { return m_description; }
   float getMetric(const std::vector<unsigned char> &data) const;
   void enable();
+  void publish(ExperimentId experimentCount,
+               SelectionId selectionCount,
+               uint32_t session_id,
+               const std::vector<RenderId> &samples,
+               OnFrameRetrace *callback);
  private:
   const int m_group, m_index;
   std::string m_name, m_description;
@@ -84,10 +92,16 @@ class PerfGroup : public NoCopy, NoAssign {
   void end(RenderId render);
   void selectMetric(MetricId metric);
   void selectAll();
-  // void publish(MetricId metric, PerfMetricsIntel::MetricMap *m);
+  void publish(ExperimentId experimentCount,
+               SelectionId selectionCount,
+               uint32_t session_id,
+               const std::vector<RenderId> &samples,
+               OnFrameRetrace *callback);
  private:
   int m_next_metric;
   std::vector<PerfMetric *> m_metrics;
+  std::map<MetricId, int> m_metric_index;
+  MetricId m_active_metric;
 };
 
 namespace glretrace {
@@ -101,14 +115,18 @@ class PerfContext : public NoCopy, NoAssign {
   void selectGroup(int index);
   void begin(RenderId render);
   void end();
-  // void publish(MetricMap *metrics);
+  void publish(ExperimentId experimentCount,
+               SelectionId selectionCount,
+               uint32_t session_id,
+               const std::vector<RenderId> &samples,
+               OnFrameRetrace *callback);
  private:
   std::vector<PerfGroup*> m_groups;
+  int m_active_group;
 };
 }  // namespace glretrace
 
-PerfMetric::PerfMetric(int group, int index) : m_group(group),
-                                               m_index(index) {
+PerfMetric::PerfMetric(int group, int index) : m_group(group), m_index(index) {
   const char *name, *description;
   GPA_Status ok = GPA_GetCounterName(index, &name);
   assert(ok == GPA_STATUS_OK);
@@ -127,6 +145,20 @@ PerfMetric::id() const {
 void PerfMetric::enable() {
   GPA_Status ok = GPA_EnableCounter(m_index);
   assert(ok == GPA_STATUS_OK);
+}
+
+void
+PerfMetric::publish(ExperimentId experimentCount,
+                    SelectionId selectionCount,
+                    uint32_t session_id,
+                    const std::vector<RenderId> &samples,
+                    OnFrameRetrace *callback) {
+  GPA_Status ok;
+  for (auto render : samples) {
+    gpa_uint64 data;
+    ok = GPA_GetSampleUInt64(session_id, render(), m_index, &data);
+    assert(ok == GPA_STATUS_OK);
+  }
 }
 
 
@@ -153,6 +185,7 @@ PerfGroup::PerfGroup(int group_index, int metric_index) {
       break;
     }
     m_metrics.push_back(new PerfMetric(group_index, m_next_metric));
+    m_metric_index[m_metrics.back()->id()] = m_metrics.size() - 1;
     ++m_next_metric;
   }
   ok = GPA_DisableAllCounters();
@@ -172,13 +205,32 @@ PerfGroup::selectMetric(MetricId metric) {
   GPA_Status ok = GPA_DisableAllCounters();
   assert(ok == GPA_STATUS_OK);
   m_metrics[metric.counter()]->enable();
+  m_active_metric = metric;
 }
+
+static const MetricId ALL_METRICS_IN_GROUP = MetricId(~ID_PREFIX_MASK);
 
 void PerfGroup::selectAll() {
   GPA_Status ok = GPA_DisableAllCounters();
   assert(ok == GPA_STATUS_OK);
   for (auto m : m_metrics)
     m->enable();
+  m_active_metric = ALL_METRICS_IN_GROUP;
+}
+
+void
+PerfGroup::publish(ExperimentId experimentCount,
+                   SelectionId selectionCount,
+                   uint32_t session_id,
+                   const std::vector<RenderId> &samples,
+                   OnFrameRetrace *callback) {
+  if (m_active_metric != ALL_METRICS_IN_GROUP)
+    return m_metrics[m_metric_index[m_active_metric]]->publish(
+        experimentCount, selectionCount,
+        session_id, samples, callback);
+  for (auto p : m_metrics)
+    p->publish(experimentCount, selectionCount,
+               session_id, samples, callback);
 }
 
 PerfContext::PerfContext(OnFrameRetrace *cb) {
@@ -210,12 +262,27 @@ PerfContext::PerfContext(OnFrameRetrace *cb) {
 
 void
 PerfContext::selectMetric(MetricId metric) {
+  m_active_group = metric.group();
   m_groups[metric.group()]->selectMetric(metric);
 }
 
 void
 PerfContext::selectGroup(int index) {
+  m_active_group = index;
   m_groups[index]->selectAll();
+}
+
+void
+PerfContext::publish(ExperimentId experimentCount,
+                     SelectionId selectionCount,
+                     uint32_t session_id,
+                     const std::vector<RenderId> &samples,
+                     OnFrameRetrace *callback) {
+  m_groups[m_active_group]->publish(experimentCount,
+                                    selectionCount,
+                                    session_id,
+                                    samples,
+                                    callback);
 }
 
 void gpa_log(GPA_Logging_Type messageType, const char* pMessage) {
@@ -300,6 +367,11 @@ void PerfMetricsAMDGPA::end() {
 void PerfMetricsAMDGPA::publish(ExperimentId experimentCount,
                SelectionId selectionCount,
                OnFrameRetrace *callback) {
+  m_contexts.begin()->second->publish(experimentCount,
+                                      selectionCount,
+                                      m_session_id,
+                                      m_open_samples,
+                                      callback);
 }
 
 void
