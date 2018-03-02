@@ -62,7 +62,7 @@ class PerfMetricsAMDGPA : public PerfMetrics, NoCopy, NoAssign {
   PerfContext *m_current_context;
   // PerfMetricsContextAMDGPA* m_current_context;
   // std::map<Context*, PerfMetricsContextAMDGPA*> m_contexts;
-  // MetricMap m_data;
+  MetricMap m_data;
   int m_current_group;
   MetricId m_current_metric;
   uint32_t m_session_id;
