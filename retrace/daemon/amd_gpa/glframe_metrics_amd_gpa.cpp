@@ -253,7 +253,8 @@ PerfGroup::publish(gpa_uint32 session,
     p->publish(session, samples, data);
 }
 
-PerfContext::PerfContext(OnFrameRetrace *cb) {
+PerfContext::PerfContext(OnFrameRetrace *cb) : m_active_group(-1),
+                                               m_current_session(-1) {
   gpa_uint32 count;
   GPA_Status ok = GPA_GetNumCounters(&count);
   assert(ok == GPA_STATUS_OK);
@@ -294,17 +295,17 @@ PerfContext::selectGroup(int index) {
 
 void PerfContext::startContext() {
   GPA_Status ok = GPA_BeginSession(&m_current_session);
-  assert(ok == GPA_STATUS_OK);
+  // assert(ok == GPA_STATUS_OK);
   ok = GPA_BeginPass();
-  assert(ok == GPA_STATUS_OK);
+  // assert(ok == GPA_STATUS_OK);
 }
 
 void
 PerfContext::endContext() {
   GPA_Status ok = GPA_EndPass();
-  assert(ok == GPA_STATUS_OK);
+  //  assert(ok == GPA_STATUS_OK);
   ok = GPA_EndSession();
-  assert(ok == GPA_STATUS_OK);
+  // assert(ok == GPA_STATUS_OK);
 }
 
 void
@@ -316,7 +317,7 @@ PerfContext::begin(RenderId render) {
 void
 PerfContext::end() {
   GPA_Status ok = GPA_EndSample();
-  assert(ok == GPA_STATUS_OK);
+  // assert(ok == GPA_STATUS_OK);
 }
 
 void
@@ -332,7 +333,8 @@ void gpa_log(GPA_Logging_Type messageType, const char* pMessage) {
 static const int INVALID_GROUP = -1;
 
 PerfMetricsAMDGPA::PerfMetricsAMDGPA(OnFrameRetrace *cb)
-    : m_current_group(INVALID_GROUP) {
+    : m_current_context(NULL),
+      m_current_group(INVALID_GROUP) {
   GPA_Status ok;
   ok =  GPA_RegisterLoggingCallback(GPA_LOGGING_ERROR_AND_MESSAGE, gpa_log);
   assert(ok == GPA_STATUS_OK);
@@ -347,7 +349,8 @@ PerfMetricsAMDGPA::PerfMetricsAMDGPA(OnFrameRetrace *cb)
   ok = GPA_SelectContext(c);
   assert(ok == GPA_STATUS_OK);
 
-  m_contexts[c] = new PerfContext(cb);
+  m_current_context = new PerfContext(cb);
+  m_contexts[c] = m_current_context;
 }
 
 PerfMetricsAMDGPA::~PerfMetricsAMDGPA() {
@@ -372,6 +375,7 @@ void PerfMetricsAMDGPA::selectMetric(MetricId metric) {
   ok = GPA_EndSession();
   // assert(ok == GPA_STATUS_OK);
   m_current_group = INVALID_GROUP;
+  m_current_metric = metric;
   for (auto c : m_contexts)
     c.second->selectMetric(metric);
   ok = GPA_BeginSession(&m_session_id);

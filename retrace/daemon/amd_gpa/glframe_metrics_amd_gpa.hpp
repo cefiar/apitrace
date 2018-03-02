@@ -66,7 +66,6 @@ class PerfMetricsAMDGPA : public PerfMetrics, NoCopy, NoAssign {
   int m_current_group;
   MetricId m_current_metric;
   uint32_t m_session_id;
-  std::vector<RenderId> m_open_samples;
 };
 
 }  // namespace glretrace

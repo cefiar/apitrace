@@ -174,6 +174,7 @@ FrameRetrace::openFile(const std::string &filename,
     auto c = new RetraceContext(current_render, parser, &retracer, &m_tracker);
     // initialize metrics collector with context
     m_metrics->beginContext();
+    m_metrics->endContext();
     current_render = RenderId(current_render.index() + c->getRenderCount());
     m_contexts.push_back(c);
     if (c->endsFrame()) {

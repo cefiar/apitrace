@@ -145,6 +145,7 @@ TEST_F(RetraceTest, SingleMetricData) {
     p->selectMetric(cb.ids[0]);
   EXPECT_TRUE(found);
 
+  p->beginContext();
   p->begin(RenderId(0));
   RenderSelection s;
   s.id = SelectionId(0);
